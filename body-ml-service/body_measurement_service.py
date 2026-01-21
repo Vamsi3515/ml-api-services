@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import cv2
 import mediapipe as mp
 import numpy as np
 
 app = FastAPI()
+
+# MediaPipe Pose (safe to load globally)
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(static_image_mode=True)
 
@@ -19,7 +20,13 @@ def distance(a, b):
 
 @app.post("/extract")
 def extract_measurements(photos: PhotoInput):
+    # 🔑 Lazy import to prevent Railway crash
+    import cv2
+
     img = cv2.imread(photos.front)
+    if img is None:
+        return {"error": "Unable to read image from provided path"}
+
     h, w, _ = img.shape
 
     results = pose.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
@@ -39,7 +46,11 @@ def extract_measurements(photos: PhotoInput):
     inseam = distance(hip_l, ankle_l)
     sleeve = distance(shoulder_l, wrist_l)
 
-    # Scale calibration (average adult shoulder width ≈ 46cm)
+    # Prevent divide-by-zero
+    if shoulder_width == 0:
+        return {"error": "Invalid pose data"}
+
+    # Scale calibration (avg adult shoulder width ≈ 46 cm)
     scale = 46 / shoulder_width
 
     measurements = {
